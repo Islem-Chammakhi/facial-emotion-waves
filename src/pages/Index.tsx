@@ -16,7 +16,7 @@ const Index = () => {
           </p>
         </header>
 
-        <Instructions />
+        {/* <Instructions /> */}
         
         <div className="mb-10">
           <FaceDetection />

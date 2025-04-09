@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import EmotionsDisplay from './EmotionsDisplay';
+import { set } from 'date-fns';
 
 interface Detection {
   expressions: {
@@ -25,6 +26,7 @@ const FaceDetection: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [showVideo, setShowVideo] = useState(true);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showLandmarksOnly, setShowLandmarksOnly] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -33,7 +35,7 @@ const FaceDetection: React.FC = () => {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = '/models';
+        const MODEL_URL = './models';
         
         // Vérifier si les modèles sont déjà chargés
         if (!faceapi.nets.tinyFaceDetector.isLoaded) {
@@ -116,7 +118,15 @@ const FaceDetection: React.FC = () => {
       }
     };
 
-    video.addEventListener('resize', adjustCanvas);
+    // Créer le ResizeObserver pour surveiller la taille de la vidéo
+    const resizeObserver = new ResizeObserver(() => {
+      adjustCanvas();
+  });
+
+    // Commencer l'observation
+    resizeObserver.observe(video);
+
+    // Appeler une première fois pour ajuster immédiatement
     adjustCanvas();
 
     if (showLandmarksOnly) {
@@ -131,39 +141,39 @@ const FaceDetection: React.FC = () => {
         return;
       }
 
-      try {
-        const detections = await faceapi
-          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceExpressions();
+      // try {
+      //   const detections = await faceapi
+      //     .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+      //     .withFaceLandmarks()
+      //     .withFaceExpressions();
 
-        // Dessiner sur le canvas
-        const context = canvas.getContext('2d');
-        if (context) {
-          context.clearRect(0, 0, canvas.width, canvas.height);
+      //   // Dessiner sur le canvas
+      //   const context = canvas.getContext('2d');
+      //   if (context) {
+      //     context.clearRect(0, 0, canvas.width, canvas.height);
           
-          if (detections && detections.length > 0) {
-            const resizedDetections = faceapi.resizeResults(detections, {
-              width: canvas.width,
-              height: canvas.height
-            });
+      //     if (detections && detections.length > 0) {
+      //       const resizedDetections = faceapi.resizeResults(detections, {
+      //         width: canvas.width,
+      //         height: canvas.height
+      //       });
 
-            // Dessiner seulement le contour du visage et les landmarks
-            faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+      //       // Dessiner seulement le contour du visage et les landmarks
+      //       faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
 
-            // Mettre à jour l'état avec les expressions détectées du premier visage
-            const firstFace = resizedDetections[0];
-            if (firstFace && !showLandmarksOnly) {
-              setDetection({
-                expressions: firstFace.expressions,
-                landmarks: firstFace.landmarks
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Erreur lors de la détection:', error);
-      }
+      //       // Mettre à jour l'état avec les expressions détectées du premier visage
+      //       const firstFace = resizedDetections[0];
+      //       if (firstFace && !showLandmarksOnly) {
+      //         setDetection({
+      //           expressions: firstFace.expressions,
+      //           landmarks: firstFace.landmarks
+      //         });
+      //       }
+      //     }
+      //   }
+      // } catch (error) {
+      //   console.error('Erreur lors de la détection:', error);
+      // }
 
       // Continuer la boucle de détection
       animationFrameId = requestAnimationFrame(detectFace);
@@ -176,7 +186,7 @@ const FaceDetection: React.FC = () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
-      video.removeEventListener('resize', adjustCanvas);
+      resizeObserver.disconnect();
     };
   }, [isModelLoaded, isCameraReady, showLandmarksOnly]);
 
@@ -208,13 +218,21 @@ const FaceDetection: React.FC = () => {
             width: canvas.width,
             height: canvas.height
           });
-
-          // Définir l'affichage uniquement des landmarks
-          setShowLandmarksOnly(true);
-
           // Dessiner seulement les landmarks du visage
           context.clearRect(0, 0, canvas.width, canvas.height);
           faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+          // Définir l'affichage uniquement des landmarks
+          setShowLandmarksOnly(true);
+          setShowVideo(false);
+
+          if (video.srcObject) {
+            const stream = video.srcObject as MediaStream;
+            // Stopper chaque piste du flux
+            stream.getTracks().forEach(track => track.stop());
+            // Optionnellement, vider la source
+            video.srcObject = null;
+          }
+
 
           // Enregistrer les expressions détectées
           const firstFace = resizedDetections[0];
@@ -240,22 +258,24 @@ const FaceDetection: React.FC = () => {
   };
 
   // Réinitialiser l'état
-  const resetDetection = () => {
+  const resetDetection =async () => {
     setShowLandmarksOnly(false);
     setDetection(null);
+    setShowVideo(true);
+    await startWebcam()
   };
 
   return (
     <div className="flex flex-col items-center gap-6">
       <Card className="w-full p-4">
         <div className="camera-container">
-          <video
+        {showVideo &&<video
             ref={videoRef}
             className="video-element"
             autoPlay
             muted
             playsInline
-          />
+          />}
           <canvas ref={canvasRef} className="canvas-overlay" />
         </div>
 
