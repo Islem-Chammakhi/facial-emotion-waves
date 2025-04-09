@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import EmotionsDisplay from './EmotionsDisplay';
-import { set } from 'date-fns';
+import { generateVoice } from "@/lib/generateVoice";
+import generateImage from "@/lib/generateContent";
+
 
 interface Detection {
   expressions: {
@@ -30,7 +32,27 @@ const FaceDetection: React.FC = () => {
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showLandmarksOnly, setShowLandmarksOnly] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
+  // Fonction pour jouer l'audio
+  const playAudio = () => {
+    if (audioRef.current && audioUrl) {
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(e => console.error("Erreur de lecture:", e));
+    }
+  };
+
+  // Fonction pour arrêter l'audio
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setIsPlaying(false);
+    }
+  };
   // Charger les modèles face-api.js
   useEffect(() => {
     const loadModels = async () => {
@@ -190,6 +212,19 @@ const FaceDetection: React.FC = () => {
     };
   }, [isModelLoaded, isCameraReady, showLandmarksOnly]);
 
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      // Démarrer la lecture automatiquement
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(error => {
+          console.error("Erreur de lecture automatique:", error);
+          // Afficher un bouton de lecture manuelle en cas d'échec
+          toast.info("Cliquez sur le bouton pour écouter l'analyse");
+        });
+    }
+  }, [audioUrl]);
+
   // Prendre une photo et analyser les expressions
   const captureAndAnalyze = async () => {
     if (!videoRef.current || !canvasRef.current) {
@@ -218,9 +253,7 @@ const FaceDetection: React.FC = () => {
             width: canvas.width,
             height: canvas.height
           });
-          // Dessiner seulement les landmarks du visage
-          context.clearRect(0, 0, canvas.width, canvas.height);
-          faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+
           // Définir l'affichage uniquement des landmarks
           setShowLandmarksOnly(true);
           setShowVideo(false);
@@ -232,7 +265,9 @@ const FaceDetection: React.FC = () => {
             // Optionnellement, vider la source
             video.srcObject = null;
           }
-
+          // Dessiner seulement les landmarks du visage
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
 
           // Enregistrer les expressions détectées
           const firstFace = resizedDetections[0];
@@ -243,6 +278,13 @@ const FaceDetection: React.FC = () => {
             });
             
             toast.success("Analyse des expressions terminée");
+            // Extraire l'émotion dominante
+            const dominantEmotion = Object.keys(firstFace.expressions).reduce((a, b) => firstFace.expressions[a] > firstFace.expressions[b] ? a : b);
+            const intensity = Math.round(firstFace.expressions[dominantEmotion] * 10);
+            // Générer le contenu apaisant
+            const calmingContent = await generateImage(dominantEmotion, intensity.toString());
+            const url = await generateVoice(calmingContent);
+            setAudioUrl(url);
           }
         } else {
           toast.error("Aucun visage détecté");
@@ -320,6 +362,12 @@ const FaceDetection: React.FC = () => {
       {detection && showLandmarksOnly && (
         <EmotionsDisplay expressions={detection.expressions} />
       )}
+      <audio 
+        ref={audioRef} 
+        src={audioUrl} 
+        hidden
+        onEnded={() => setIsPlaying(false)}
+      />
     </div>
   );
 };

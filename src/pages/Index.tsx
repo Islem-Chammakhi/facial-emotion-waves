@@ -2,7 +2,7 @@
 import React from "react";
 import FaceDetection from "@/components/FaceDetection";
 import Instructions from "@/components/Instructions";
-
+import ImageGenerator from "@/components/ImageGenerator";
 const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50 py-8 px-4 sm:px-6">
